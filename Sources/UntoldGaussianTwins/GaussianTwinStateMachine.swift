@@ -36,16 +36,22 @@ func gaussianTwinStep(
             return GaussianTwinStep(state: .loading, progress: 0)
         }
         return GaussianTwinStep(state: wantsSwap ? .crossFading : .armed, progress: 0)
-    case .crossFading:
-        guard wantsSwap else { return GaussianTwinStep(state: .reverting, progress: 1 - progress) }
-        let next = progress + increment
-        return next >= 1 ? GaussianTwinStep(state: .swapped, progress: 1) : GaussianTwinStep(state: .crossFading, progress: next)
-    case .swapped:
-        return wantsSwap ? GaussianTwinStep(state: .swapped, progress: 1) : GaussianTwinStep(state: .reverting, progress: 0)
-    case .reverting:
-        guard !wantsSwap else { return GaussianTwinStep(state: .crossFading, progress: 1 - progress) }
-        let next = progress + increment
-        return next >= 1 ? GaussianTwinStep(state: .armed, progress: 0) : GaussianTwinStep(state: .reverting, progress: next)
+    case .crossFading, .swapped, .reverting:
+        // The splat went away under a running swap (an app dropped it, memory pressure): back to
+        // the plain mesh at once, never a colour-off mesh with nothing to show in its place.
+        guard payloadResident else { return GaussianTwinStep(state: .armed, progress: 0) }
+        switch state {
+        case .crossFading:
+            guard wantsSwap else { return GaussianTwinStep(state: .reverting, progress: 1 - progress) }
+            let next = progress + increment
+            return next >= 1 ? GaussianTwinStep(state: .swapped, progress: 1) : GaussianTwinStep(state: .crossFading, progress: next)
+        case .swapped:
+            return wantsSwap ? GaussianTwinStep(state: .swapped, progress: 1) : GaussianTwinStep(state: .reverting, progress: 0)
+        default:
+            guard !wantsSwap else { return GaussianTwinStep(state: .crossFading, progress: 1 - progress) }
+            let next = progress + increment
+            return next >= 1 ? GaussianTwinStep(state: .armed, progress: 0) : GaussianTwinStep(state: .reverting, progress: next)
+        }
     }
 }
 

@@ -71,10 +71,15 @@ public struct GaussianTwinOptions: Sendable, Equatable {
 /// loads the payload onto the same entity, cross-fades the two through the engine's
 /// `MeshFadeComponent` and `GaussianComponent.opacityScale`, and keeps the mesh's depth through a
 /// `MeshOccluderComponent` while the splat is shown. Attached by `setEntityGaussianTwin`, or
-/// adopted from a `.untold` scene's `GaussianAssetLinkComponent` flagged `meshTwin`.
+/// adopted from a `.untold` scene's `GaussianAssetLinkComponent` flagged `meshTwin`. A splat
+/// already on the entity when the twin is linked becomes its payload (hidden until the swap; its
+/// exposure offset and tint follow the twin's options). The twin owns the entity's
+/// `MeshOccluderComponent` and `MeshFadeComponent` while linked.
 public final class GaussianTwinComponent: Component {
-    /// The `.untoldgs` (or `.ply`) file loaded when the swap arms.
-    public var payloadURL: URL?
+    /// The `.untoldgs` (or `.ply`) file loaded when the swap arms. Change it through
+    /// `setEntityGaussianTwin`, which drops the previous payload and restarts the swap.
+    public internal(set) var payloadURL: URL?
+    /// Read every tick; may be adjusted at any time.
     public var options = GaussianTwinOptions()
     public internal(set) var state: GaussianTwinState = .armed
     /// 0...1 progress of the running cross-fade (`.crossFading` and `.reverting` only).

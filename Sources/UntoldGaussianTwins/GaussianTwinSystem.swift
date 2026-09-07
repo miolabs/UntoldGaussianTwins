@@ -26,6 +26,9 @@ public final class GaussianTwinSystem: EngineExtension, @unchecked Sendable {
     /// Longest frame the fade integrates, so a hitch does not jump it to the end.
     private let maxDeltaTime: Float = 0.1
     private var installed = false
+    /// Scene links already looked at (adopted, not a twin, or unlinked by the app), so the
+    /// per-frame adoption only touches new ones.
+    private var examinedSceneLinks: Set<EntityID> = []
 
     /// Tests set this to exercise the state machine with or without a renderer.
     var splatRenderingAvailableOverride: Bool?
@@ -45,11 +48,34 @@ public final class GaussianTwinSystem: EngineExtension, @unchecked Sendable {
         _ = EngineExtensionRegistry.shared.register(self)
     }
 
-    /// Stops ticking. Existing twins keep their current presentation until removed.
+    /// Stops ticking and puts every twin back on its mesh: pending loads are cancelled, shells
+    /// and fades removed, resident payloads kept (hidden). The links stay, so `install()` picks
+    /// the swaps up again.
     public func uninstall() {
         guard installed else { return }
         EngineExtensionRegistry.shared.unregister(id: id)
         installed = false
+        resetAllTwins()
+    }
+
+    public func willUnregister() {
+        installed = false
+        resetAllTwins()
+    }
+
+    private func resetAllTwins() {
+        let twinId = getComponentId(for: GaussianTwinComponent.self)
+        withWorldMutationGate {
+            for entityId in queryEntitiesWithComponentIds([twinId], in: scene) {
+                guard let twin = scene.get(component: GaussianTwinComponent.self, for: entityId) else { continue }
+                twin.loadTask?.cancel()
+                twin.loadTask = nil
+                twin.loadGeneration &+= 1
+                twin.state = .armed
+                twin.fadeProgress = 0
+                applyPresentation(entityId: entityId, twin: twin)
+            }
+        }
     }
 
     public func update(deltaTime: Float, context _: EngineExtensionUpdateContext) {
@@ -124,12 +150,15 @@ public final class GaussianTwinSystem: EngineExtension, @unchecked Sendable {
         }
     }
 
-    /// Attaches a twin to every mesh entity carrying a scene link flagged `meshTwin` that has
-    /// none yet, with the record's settings.
+    /// Attaches a twin to every mesh entity carrying a scene link flagged `meshTwin` that has not
+    /// been looked at yet, with the record's settings. Each link is examined once: a twin the app
+    /// unlinks with `removeEntityGaussianTwin` stays unlinked, and links that are not mesh twins
+    /// are not re-checked every frame.
     public func adoptSceneLinks() {
         let linkId = getComponentId(for: GaussianAssetLinkComponent.self)
         let renderId = getComponentId(for: RenderComponent.self)
-        for entityId in queryEntitiesWithComponentIds([linkId, renderId], in: scene) {
+        for entityId in queryEntitiesWithComponentIds([linkId, renderId], in: scene) where !examinedSceneLinks.contains(entityId) {
+            examinedSceneLinks.insert(entityId)
             guard scene.get(component: GaussianTwinComponent.self, for: entityId) == nil,
                   let link = scene.get(component: GaussianAssetLinkComponent.self, for: entityId),
                   link.isMeshTwin,
@@ -137,6 +166,16 @@ public final class GaussianTwinSystem: EngineExtension, @unchecked Sendable {
             else { continue }
             setEntityGaussianTwin(entityId: entityId, payloadURL: payloadURL, options: GaussianTwinOptions(link: link))
         }
+    }
+
+    /// Marks an entity's scene link as handled by the app, so `adoptSceneLinks` leaves it alone.
+    func markSceneLinkExamined(_ entityId: EntityID) {
+        examinedSceneLinks.insert(entityId)
+    }
+
+    /// Forgets which scene links were examined (tests, scene reloads).
+    public func resetSceneLinkAdoption() {
+        examinedSceneLinks.removeAll()
     }
 
     // MARK: - Presentation
@@ -175,6 +214,7 @@ public final class GaussianTwinSystem: EngineExtension, @unchecked Sendable {
             if existing == nil {
                 registerComponent(entityId: entityId, componentType: MeshOccluderComponent.self)
                 BatchingSystem.shared.notifyEntityMaterialChanged(entityId: entityId)
+                RenderPasses.invalidateShadowEntityCache()
             }
             guard let occluder = scene.get(component: MeshOccluderComponent.self, for: entityId) else { return }
             occluder.shrinkMeters = twin.options.occluderShrinkMeters
@@ -182,22 +222,23 @@ public final class GaussianTwinSystem: EngineExtension, @unchecked Sendable {
         } else if existing != nil {
             scene.remove(component: MeshOccluderComponent.self, from: entityId)
             BatchingSystem.shared.notifyEntityMaterialChanged(entityId: entityId)
+            RenderPasses.invalidateShadowEntityCache()
         }
     }
 
+    /// The fade only ever accompanies the occluder shell, which already keeps the entity out of
+    /// its batch, so adding or removing it needs no batching notification of its own.
     private func setFade(entityId: EntityID, present: Bool, direction: MeshFadeComponent.Direction, progress: Float) {
         let existing = scene.get(component: MeshFadeComponent.self, for: entityId)
         if present {
             if existing == nil {
                 registerComponent(entityId: entityId, componentType: MeshFadeComponent.self)
-                BatchingSystem.shared.notifyEntityMaterialChanged(entityId: entityId)
             }
             guard let fade = scene.get(component: MeshFadeComponent.self, for: entityId) else { return }
             fade.direction = direction
             fade.progress = progress
         } else if existing != nil {
             scene.remove(component: MeshFadeComponent.self, from: entityId)
-            BatchingSystem.shared.notifyEntityMaterialChanged(entityId: entityId)
         }
     }
 
@@ -257,7 +298,8 @@ public final class GaussianTwinSystem: EngineExtension, @unchecked Sendable {
 /// Links `entityId`'s mesh to the captured splat at `payloadURL` as its twin. Nothing is loaded
 /// here: `GaussianTwinSystem` loads the payload when the camera comes within
 /// `options.swapDistanceMeters` (at once when that is 0), cross-fades to it, and fades back
-/// when the camera leaves. Relinking an entity drops the payload of the previous link.
+/// when the camera leaves. A splat already on the entity becomes the twin's payload and is
+/// hidden until the swap. Relinking an entity drops the payload of the previous link.
 public func setEntityGaussianTwin(
     entityId: EntityID,
     payloadURL: URL,
@@ -284,6 +326,7 @@ public func setEntityGaussianTwin(
         twin.state = .armed
         twin.fadeProgress = 0
         twin.loadFailed = false
+        GaussianTwinSystem.shared.markSceneLinkExamined(entityId)
         // Back to the plain mesh at once; the next tick re-evaluates.
         if scene.get(component: MeshOccluderComponent.self, for: entityId) != nil
             || scene.get(component: MeshFadeComponent.self, for: entityId) != nil
@@ -291,6 +334,7 @@ public func setEntityGaussianTwin(
             scene.remove(component: MeshOccluderComponent.self, from: entityId)
             scene.remove(component: MeshFadeComponent.self, from: entityId)
             BatchingSystem.shared.notifyEntityMaterialChanged(entityId: entityId)
+            RenderPasses.invalidateShadowEntityCache()
         }
     }
 }
@@ -310,10 +354,12 @@ public func setEntityGaussianTwin(
     setEntityGaussianTwin(entityId: entityId, payloadURL: url, options: options)
 }
 
-/// Unlinks the twin: cancels a pending load, drops the splat it loaded and shows the mesh
-/// again. Also the component's cleanup handler when the entity is destroyed.
+/// Unlinks the twin: cancels a pending load, drops the splat and shows the mesh again. A scene
+/// link on the entity is left in place but not adopted again. Also the component's cleanup
+/// handler when the entity is destroyed.
 public func removeEntityGaussianTwin(entityId: EntityID) {
     withWorldMutationGate {
+        GaussianTwinSystem.shared.markSceneLinkExamined(entityId)
         guard let twin = scene.get(component: GaussianTwinComponent.self, for: entityId) else { return }
         twin.loadTask?.cancel()
         twin.loadTask = nil
@@ -325,5 +371,6 @@ public func removeEntityGaussianTwin(entityId: EntityID) {
         scene.remove(component: MeshFadeComponent.self, from: entityId)
         scene.remove(component: GaussianTwinComponent.self, from: entityId)
         BatchingSystem.shared.notifyEntityMaterialChanged(entityId: entityId)
+        RenderPasses.invalidateShadowEntityCache()
     }
 }

@@ -25,7 +25,8 @@ let package = Package(
         ),
         .testTarget(
             name: "UntoldGaussianTwinsTests",
-            dependencies: ["UntoldGaussianTwins"]
+            dependencies: ["UntoldGaussianTwins"],
+            resources: [.copy("Resources")]
         ),
     ]
 )

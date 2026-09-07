@@ -12,9 +12,13 @@ back.
 ## Setup
 
 ```swift
-// Package.swift
+// Package.swift (once the package is published under miolabs)
 .package(url: "https://github.com/miolabs/UntoldGaussianTwins.git", branch: "main")
 ```
+
+The package needs the engine mechanisms it builds on (`MeshOccluderComponent`,
+`MeshFadeComponent`, `GaussianAssetLinkComponent`, the two-phase splat load), which are on the
+fork's `develop` from the "generic occluder shell" refactor onwards.
 
 ```swift
 import UntoldGaussianTwins
@@ -47,10 +51,17 @@ setEntityGaussianTwin(
 ```
 
 From a scene: a `.untold` file whose entity carries a `gaussianAsset` record flagged
-`meshTwin` arrives with a `GaussianAssetLinkComponent`; the system adopts it automatically
-(`adoptsSceneLinks`) with the record's margin, exposure offset and swap distance.
+`meshTwin` arrives with a `GaussianAssetLinkComponent`; the system adopts it once, automatically
+(`adoptsSceneLinks`), with the record's margin, exposure offset and swap distance.
 
-`removeEntityGaussianTwin(entityId:)` unlinks, drops the splat and shows the mesh.
+A splat already on the entity when the twin is linked becomes its payload: it is hidden until
+the swap, and its exposure offset and tint follow the twin's options from then on. The twin
+owns the entity's `MeshOccluderComponent` and `MeshFadeComponent` while linked.
+
+`removeEntityGaussianTwin(entityId:)` unlinks, drops the splat and shows the mesh; a scene link
+on that entity is not adopted again. If the splat goes away under a running swap (the app
+calls `removeEntityGaussian`, memory pressure), the mesh shows again at once and the swap
+starts over from `armed`.
 
 ## What happens
 
@@ -70,8 +81,10 @@ Notes:
 - A batched mesh leaves its batch group when the swap starts and re-joins after reverting; the
   group is rebuilt over a few frames.
 - Where splats cannot be drawn (the iOS simulator has no splat pipelines) twins stay armed.
+- `GaussianTwinSystem.shared.uninstall()` stops the system and puts every twin back on its
+  mesh; resident payloads are kept, hidden. `install()` picks the swaps up again.
 - Soft objects differ from their mesh by centimetres: raise `occluderShrinkMeters` until the
-  front of the capture stops clipping. `GaussianDebugOptions.shared.disableOccluderShells`
+  front of the capture stops clipping. `GaussianDebugOptions.shared.disableOccluderShell`
   turns the shells off for bisecting.
 
 ## Development

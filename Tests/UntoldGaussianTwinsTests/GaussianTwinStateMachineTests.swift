@@ -11,6 +11,15 @@ import XCTest
 /// The swap's state machine and distance rule, and the component's registration.
 @MainActor
 final class GaussianTwinStateMachineTests: XCTestCase {
+    override func tearDown() async throws {
+        // Leave the engine's globals as we found them for the next test in the process.
+        CameraSystem.shared.activeCamera = nil
+        GaussianTwinSystem.shared.splatRenderingAvailableOverride = nil
+        GaussianTwinSystem.shared.resetSceneLinkAdoption()
+        destroyAllEntities()
+        try await super.tearDown()
+    }
+
     private func step(
         _ state: GaussianTwinState,
         progress: Float = 0,
@@ -68,6 +77,18 @@ final class GaussianTwinStateMachineTests: XCTestCase {
         current = step(.reverting, progress: 0, wantsSwap: false, deltaTime: 0.05, duration: 0.25)
         XCTAssertEqual(current.state, .reverting)
         XCTAssertEqual(current.progress, 0.2, accuracy: 1e-5)
+    }
+
+    /// The splat can go away under a running swap (an app dropped it, memory pressure). Every
+    /// state that shows or fades it falls back to the plain mesh at once, never a colour-off
+    /// mesh with nothing in its place.
+    func testLosingThePayloadUnderARunningSwapFallsBackToTheMesh() {
+        XCTAssertEqual(step(.crossFading, progress: 0.5, resident: false), GaussianTwinStep(state: .armed, progress: 0))
+        XCTAssertEqual(step(.swapped, progress: 1, resident: false), GaussianTwinStep(state: .armed, progress: 0))
+        XCTAssertEqual(step(.reverting, progress: 0.5, resident: false), GaussianTwinStep(state: .armed, progress: 0))
+        XCTAssertEqual(step(.swapped, wantsSwap: false, resident: false), GaussianTwinStep(state: .armed, progress: 0))
+        // And with the camera still near, the next tick loads again.
+        XCTAssertEqual(step(.armed, resident: false), GaussianTwinStep(state: .loading, progress: 0))
     }
 
     func testAZeroDurationDoesNotDivideByZero() {
@@ -128,12 +149,10 @@ final class GaussianTwinStateMachineTests: XCTestCase {
 
         removeEntityGaussianTwin(entityId: entity)
         XCTAssertNil(scene.get(component: GaussianTwinComponent.self, for: entity))
-        destroyEntity(entityId: entity)
     }
 
     func testTwinWithoutMeshStaysArmedAndLoadsNothing() {
         GaussianTwinSystem.shared.splatRenderingAvailableOverride = true
-        defer { GaussianTwinSystem.shared.splatRenderingAvailableOverride = nil }
         let entity = createEntity()
         registerTransformComponent(entityId: entity)
         setEntityGaussianTwin(entityId: entity, payloadURL: URL(fileURLWithPath: "/tmp/chair.untoldgs"))
@@ -147,8 +166,63 @@ final class GaussianTwinStateMachineTests: XCTestCase {
         let twin = scene.get(component: GaussianTwinComponent.self, for: entity)
         XCTAssertEqual(twin?.state, .armed, "Nothing to swap from yet")
         XCTAssertNil(twin?.loadTask)
-        removeEntityGaussianTwin(entityId: entity)
-        destroyEntity(entityId: entity)
-        destroyEntity(entityId: camera)
+    }
+
+    /// A scene link flagged `meshTwin` is adopted once; unlinking it sticks, and a link that is
+    /// not a mesh twin is never adopted.
+    func testSceneLinksAreAdoptedOnceAndUnlinkingSticks() {
+        GaussianTwinSystem.shared.splatRenderingAvailableOverride = true
+        let camera = createEntity()
+        registerComponent(entityId: camera, componentType: CameraComponent.self)
+        CameraSystem.shared.activeCamera = camera
+
+        let twinEntity = createEntity()
+        registerTransformComponent(entityId: twinEntity)
+        registerComponent(entityId: twinEntity, componentType: RenderComponent.self)
+        registerComponent(entityId: twinEntity, componentType: GaussianAssetLinkComponent.self)
+        let link = scene.get(component: GaussianAssetLinkComponent.self, for: twinEntity)
+        link?.payloadURL = URL(fileURLWithPath: "/tmp/chair.untoldgs")
+        link?.flags = UntoldGaussianAssetFlags.meshTwin
+        link?.swapDistanceMeters = 7
+
+        let environmentEntity = createEntity()
+        registerTransformComponent(entityId: environmentEntity)
+        registerComponent(entityId: environmentEntity, componentType: RenderComponent.self)
+        registerComponent(entityId: environmentEntity, componentType: GaussianAssetLinkComponent.self)
+        scene.get(component: GaussianAssetLinkComponent.self, for: environmentEntity)?.payloadURL = URL(fileURLWithPath: "/tmp/room.untoldgs")
+        scene.get(component: GaussianAssetLinkComponent.self, for: environmentEntity)?.flags = UntoldGaussianAssetFlags.environment
+
+        GaussianTwinSystem.shared.update(deltaTime: 0.016)
+        let twin = scene.get(component: GaussianTwinComponent.self, for: twinEntity)
+        XCTAssertNotNil(twin, "The meshTwin link is adopted")
+        XCTAssertEqual(twin?.options.swapDistanceMeters, 7, "With the record's settings")
+        XCTAssertNil(scene.get(component: GaussianTwinComponent.self, for: environmentEntity), "An environment link is not a twin")
+
+        removeEntityGaussianTwin(entityId: twinEntity)
+        GaussianTwinSystem.shared.update(deltaTime: 0.016)
+        XCTAssertNil(scene.get(component: GaussianTwinComponent.self, for: twinEntity), "Unlinking sticks across ticks")
+
+        setEntityGaussianTwin(entityId: twinEntity, payloadURL: URL(fileURLWithPath: "/tmp/other.untoldgs"))
+        XCTAssertEqual(scene.get(component: GaussianTwinComponent.self, for: twinEntity)?.payloadURL?.lastPathComponent, "other.untoldgs", "An explicit relink works after an unlink")
+    }
+
+    func testUninstallPutsTwinsBackOnTheirMeshAndInstallCanFollow() {
+        GaussianTwinSystem.shared.install()
+        let entity = createEntity()
+        registerTransformComponent(entityId: entity)
+        setEntityGaussianTwin(entityId: entity, payloadURL: URL(fileURLWithPath: "/tmp/chair.untoldgs"))
+        let twin = scene.get(component: GaussianTwinComponent.self, for: entity)
+        twin?.state = .swapped
+        registerComponent(entityId: entity, componentType: MeshOccluderComponent.self)
+        scene.get(component: MeshOccluderComponent.self, for: entity)?.drawsColor = false
+
+        GaussianTwinSystem.shared.uninstall()
+        XCTAssertEqual(twin?.state, .armed)
+        XCTAssertNil(scene.get(component: MeshOccluderComponent.self, for: entity), "The shell is gone with the system")
+        XCTAssertFalse(EngineExtensionRegistry.shared.registeredIDs().contains(GaussianTwinSystem.shared.id))
+
+        GaussianTwinSystem.shared.install()
+        XCTAssertTrue(EngineExtensionRegistry.shared.registeredIDs().contains(GaussianTwinSystem.shared.id), "install works again after uninstall")
+        GaussianTwinSystem.shared.uninstall()
     }
 }

@@ -1,7 +1,7 @@
 # UntoldGaussianTwins
 
 Swap a mesh for its captured Gaussian-splat twin up close, with no popping, on top of
-[UntoldEngine](https://github.com/miolabs/UntoldEngine).
+[UntoldEngine](https://github.com/untoldengine/UntoldEngine).
 
 The engine stays a renderer: it provides the mechanisms (a depth-only shrunk occluder shell
 per mesh, a mesh colour fade, a per-entity splat opacity weight, the `gaussianAsset` link a

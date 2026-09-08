@@ -14,7 +14,7 @@ let package = Package(
     dependencies: [
         // The mesh occluder shell, mesh fade, gaussianAsset link and URL splat loader this
         // package builds on are on the fork's develop until upstream ships them.
-        .package(url: "https://github.com/miolabs/UntoldEngine.git", branch: "develop"),
+        .package(url: "https://github.com/untoldengine/UntoldEngine.git", branch: "develop"),
     ],
     targets: [
         .target(

@@ -65,6 +65,15 @@ align mode drives. It is stored in the scene record (`untoldengine gaussian-link
 x,y,z --align-yaw-degrees d --align-scale s`); the cook transform baked into the `.untoldgs`
 header stays what it is.
 
+`showsMeshWhileSwapped` is an authoring aid for that alignment: while it is set, the swapped
+state keeps drawing the mesh's colour and installs no occluder shell, so the mesh and the
+splat are both visible at once and the offset, yaw and scale can be judged against the surface
+the splat should sit on. The splat still swaps in by distance and follows `alignment`; the
+fades and the other states are unchanged, and clearing the flag restores the normal swapped
+presentation on the next tick. An editor's align mode sets it (together with a zero swap
+distance) on the twin's options only, never in the scene record; it is not meant for shipping
+content.
+
 A splat already on the entity when the twin is linked becomes its payload: it is hidden until
 the swap, and its exposure offset and tint follow the twin's options from then on. The twin
 owns the entity's `MeshOccluderComponent` and `MeshFadeComponent` while linked.
@@ -81,7 +90,7 @@ starts over from `armed`.
 | `armed` | The mesh. The payload may already be resident from an earlier swap. |
 | `loading` | Still the mesh; nothing changes until the payload is on the GPU. |
 | `crossFading` | The mesh dithers out (`MeshFadeComponent`) while the splat's opacity ramps in, over `crossFadeDuration`. The occluder shell is on. |
-| `swapped` | The splat. The mesh draws no colour (`MeshOccluderComponent.drawsColor = false`) but keeps writing depth as a shrunk shell, casting shadows, colliding and being picked. |
+| `swapped` | The splat. The mesh draws no colour (`MeshOccluderComponent.drawsColor = false`) but keeps writing depth as a shrunk shell, casting shadows, colliding and being picked. With `showsMeshWhileSwapped` the mesh draws as usual instead (no shell). |
 | `reverting` | The reverse fade when the camera leaves `swapDistanceMeters + hysteresisMeters`. Ends `armed`; the payload stays resident so the next swap is instant. |
 
 Notes:

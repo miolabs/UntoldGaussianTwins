@@ -44,6 +44,12 @@ public struct GaussianTwinOptions: Sendable, Equatable {
     /// `alignment.matrix`: offset, yaw about +Y, uniform scale), applied to the resident splat
     /// every tick so an edit shows at once; nil is identity.
     public var alignment: GaussianSplatAlignment?
+    /// Authoring aid: while swapped, keep drawing the mesh's colour and install no occluder
+    /// shell, so the mesh and the splat are both visible at once and `alignment` can be judged
+    /// against the surface it should sit on (an editor's align mode). The splat still swaps
+    /// in by distance and follows `alignment`; the fades and the other states are unchanged.
+    /// Not meant for shipping content.
+    public var showsMeshWhileSwapped: Bool
 
     public init(
         swapDistanceMeters: Float = 0,
@@ -52,7 +58,8 @@ public struct GaussianTwinOptions: Sendable, Equatable {
         occluderShrinkMeters: Float = 0.02,
         exposureOffsetEV: Float = 0,
         useRealWorldTint: Bool = false,
-        alignment: GaussianSplatAlignment? = nil
+        alignment: GaussianSplatAlignment? = nil,
+        showsMeshWhileSwapped: Bool = false
     ) {
         self.swapDistanceMeters = swapDistanceMeters
         self.hysteresisMeters = hysteresisMeters
@@ -61,6 +68,7 @@ public struct GaussianTwinOptions: Sendable, Equatable {
         self.exposureOffsetEV = exposureOffsetEV
         self.useRealWorldTint = useRealWorldTint
         self.alignment = alignment
+        self.showsMeshWhileSwapped = showsMeshWhileSwapped
     }
 
     /// The options a scene's `gaussianAsset` record asks for.

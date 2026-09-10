@@ -208,7 +208,12 @@ public final class GaussianTwinSystem: EngineExtension, @unchecked Sendable {
             setFade(entityId: entityId, present: true, direction: .fadeOut, progress: twin.fadeProgress)
         case .swapped:
             gaussian?.opacityScale = 1
-            setOccluder(entityId: entityId, twin: twin, present: true, drawsColor: false)
+            if twin.options.showsMeshWhileSwapped {
+                // Authoring: the plain mesh (colour and depth, no shell) under the splat.
+                setOccluder(entityId: entityId, twin: twin, present: false, drawsColor: true)
+            } else {
+                setOccluder(entityId: entityId, twin: twin, present: true, drawsColor: false)
+            }
             setFade(entityId: entityId, present: false, direction: .fadeOut, progress: 0)
         case .reverting:
             gaussian?.opacityScale = gaussianTwinSplatOpacity(state: .reverting, progress: twin.fadeProgress)

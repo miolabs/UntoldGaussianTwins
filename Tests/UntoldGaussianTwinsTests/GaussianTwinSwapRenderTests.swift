@@ -160,6 +160,48 @@
             twin.loadTask?.cancel()
         }
 
+        /// Authoring aid: with `showsMeshWhileSwapped` the swapped state keeps the plain mesh
+        /// (colour on, no shell) under the splat, which still swaps in by distance and follows
+        /// the alignment; clearing the flag restores the normal swapped shell on the next tick.
+        func testShowsMeshWhileSwappedKeepsThePlainMeshUnderTheSplat() async throws {
+            makeCamera(at: simd_float3(0, 0, 5))
+            let entity = makeCubeEntity()
+            let alignment = GaussianSplatAlignment(translation: SIMD3<Float>(0.1, 0, -0.2), yawDegrees: 45, scale: 1.1)
+            try setEntityGaussianTwin(
+                entityId: entity,
+                payloadURL: testPLYURL(),
+                options: GaussianTwinOptions(swapDistanceMeters: 0, crossFadeDuration: 0.1, alignment: alignment, showsMeshWhileSwapped: true)
+            )
+            let twin = try XCTUnwrap(scene.get(component: GaussianTwinComponent.self, for: entity))
+            tick()
+            try await waitForPayload(on: entity)
+            let gaussian = try XCTUnwrap(scene.get(component: GaussianComponent.self, for: entity))
+
+            tick()
+            XCTAssertEqual(twin.state, .crossFading)
+            XCTAssertEqual(scene.get(component: MeshOccluderComponent.self, for: entity)?.drawsColor, true, "The fade is unchanged: shell on, colour on")
+            XCTAssertNotNil(scene.get(component: MeshFadeComponent.self, for: entity))
+
+            tick(2, deltaTime: 0.1)
+            XCTAssertEqual(twin.state, .swapped)
+            XCTAssertNil(scene.get(component: MeshOccluderComponent.self, for: entity), "Swapped with the mesh showing: no shell, the mesh draws colour and depth as usual")
+            XCTAssertNil(scene.get(component: MeshFadeComponent.self, for: entity))
+            XCTAssertEqual(gaussian.opacityScale, 1, "The splat is fully in")
+            XCTAssertEqual(gaussian.splatToEntity, alignment.matrix, "and sits where the alignment puts it")
+
+            twin.options.showsMeshWhileSwapped = false
+            tick()
+            XCTAssertEqual(twin.state, .swapped)
+            let occluder = try XCTUnwrap(scene.get(component: MeshOccluderComponent.self, for: entity), "Flag cleared: the normal swapped shell is back on the next tick")
+            XCTAssertFalse(occluder.drawsColor)
+            XCTAssertEqual(gaussian.opacityScale, 1)
+
+            twin.options.showsMeshWhileSwapped = true
+            tick()
+            XCTAssertNil(scene.get(component: MeshOccluderComponent.self, for: entity), "and goes again when the flag is set")
+            XCTAssertEqual(gaussian.splatToEntity, alignment.matrix)
+        }
+
         func testUnlinkingDropsTheSplatAndItsPresentation() async throws {
             makeCamera(at: simd_float3(0, 0, 5))
             let entity = makeCubeEntity()

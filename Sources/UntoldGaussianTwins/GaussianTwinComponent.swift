@@ -40,6 +40,10 @@ public struct GaussianTwinOptions: Sendable, Equatable {
     public var exposureOffsetEV: Float
     /// In XR, tint the splat by the real-world lighting estimate (`GaussianComponent.useRealWorldTint`).
     public var useRealWorldTint: Bool
+    /// Where the splat sits in the mesh's local space (`GaussianComponent.splatToEntity` =
+    /// `alignment.matrix`: offset, yaw about +Y, uniform scale), applied to the resident splat
+    /// every tick so an edit shows at once; nil is identity.
+    public var alignment: GaussianSplatAlignment?
 
     public init(
         swapDistanceMeters: Float = 0,
@@ -47,7 +51,8 @@ public struct GaussianTwinOptions: Sendable, Equatable {
         crossFadeDuration: Float = 0.25,
         occluderShrinkMeters: Float = 0.02,
         exposureOffsetEV: Float = 0,
-        useRealWorldTint: Bool = false
+        useRealWorldTint: Bool = false,
+        alignment: GaussianSplatAlignment? = nil
     ) {
         self.swapDistanceMeters = swapDistanceMeters
         self.hysteresisMeters = hysteresisMeters
@@ -55,6 +60,7 @@ public struct GaussianTwinOptions: Sendable, Equatable {
         self.occluderShrinkMeters = occluderShrinkMeters
         self.exposureOffsetEV = exposureOffsetEV
         self.useRealWorldTint = useRealWorldTint
+        self.alignment = alignment
     }
 
     /// The options a scene's `gaussianAsset` record asks for.
@@ -62,7 +68,8 @@ public struct GaussianTwinOptions: Sendable, Equatable {
         self.init(
             swapDistanceMeters: link.swapDistanceMeters,
             occluderShrinkMeters: link.occluderShrinkMeters,
-            exposureOffsetEV: link.exposureOffsetEV
+            exposureOffsetEV: link.exposureOffsetEV,
+            alignment: link.alignment
         )
     }
 }

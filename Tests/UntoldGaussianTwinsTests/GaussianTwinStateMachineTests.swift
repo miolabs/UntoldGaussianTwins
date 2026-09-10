@@ -4,6 +4,7 @@
 //
 
 import Foundation
+import simd
 import UntoldEngine
 @testable import UntoldGaussianTwins
 import XCTest
@@ -128,6 +129,43 @@ final class GaussianTwinStateMachineTests: XCTestCase {
         XCTAssertEqual(options.occluderShrinkMeters, 0.03)
         XCTAssertEqual(options.exposureOffsetEV, 0.5)
         XCTAssertEqual(options.crossFadeDuration, 0.25, "Not in the record: the default")
+        XCTAssertNil(options.alignment, "No alignment in the record: identity")
+
+        let alignment = GaussianSplatAlignment(translation: SIMD3<Float>(0, 0.02, -0.1), yawDegrees: 90, scale: 1.02)
+        link.alignment = alignment
+        let aligned = GaussianTwinOptions(link: link)
+        XCTAssertEqual(aligned.alignment, alignment)
+        XCTAssertNotEqual(aligned, options, "The alignment is part of the options' equality")
+    }
+
+    /// A resident splat's placement follows the twin's options tick by tick: an alignment set
+    /// after the link moves it without relinking, nil puts it back to identity.
+    func testAResidentSplatFollowsTheOptionsAlignment() {
+        GaussianTwinSystem.shared.splatRenderingAvailableOverride = true
+        let camera = createEntity()
+        registerComponent(entityId: camera, componentType: CameraComponent.self)
+        CameraSystem.shared.activeCamera = camera
+
+        let entity = createEntity()
+        registerTransformComponent(entityId: entity)
+        let alignment = GaussianSplatAlignment(translation: SIMD3<Float>(1, 0, 0), yawDegrees: 30, scale: 1.5)
+        setEntityGaussianTwin(entityId: entity, payloadURL: URL(fileURLWithPath: "/tmp/chair.untoldgs"), options: GaussianTwinOptions(alignment: alignment))
+        // A splat on the entity (no renderer needed to carry the component) is the twin's payload.
+        registerComponent(entityId: entity, componentType: GaussianComponent.self)
+        let gaussian = scene.get(component: GaussianComponent.self, for: entity)
+        XCTAssertEqual(gaussian?.splatToEntity, matrix_identity_float4x4, "Nothing applied before the first tick")
+
+        GaussianTwinSystem.shared.update(deltaTime: 0.016)
+        XCTAssertEqual(gaussian?.splatToEntity, alignment.matrix, "The link's alignment is on the component")
+
+        let moved = GaussianSplatAlignment(translation: SIMD3<Float>(0, 0.5, 0), yawDegrees: -45, scale: 0.9)
+        scene.get(component: GaussianTwinComponent.self, for: entity)?.options.alignment = moved
+        GaussianTwinSystem.shared.update(deltaTime: 0.016)
+        XCTAssertEqual(gaussian?.splatToEntity, moved.matrix, "An options change moves the resident splat on the next tick")
+
+        scene.get(component: GaussianTwinComponent.self, for: entity)?.options.alignment = nil
+        GaussianTwinSystem.shared.update(deltaTime: 0.016)
+        XCTAssertEqual(gaussian?.splatToEntity, matrix_identity_float4x4, "nil is identity")
     }
 
     // MARK: - Registration (needs the engine's scene, no renderer)

@@ -45,14 +45,25 @@ setEntityGaussianTwin(
         crossFadeDuration: 0.25,     // seconds, wall-clock
         occluderShrinkMeters: 0.02,  // the shell's margin behind the surface
         exposureOffsetEV: 0,         // on top of the capture exposure
-        useRealWorldTint: false      // XR: tint by the real-world lighting estimate
+        useRealWorldTint: false,     // XR: tint by the real-world lighting estimate
+        alignment: GaussianSplatAlignment(  // where the splat sits in the mesh's space
+            translation: SIMD3<Float>(0, 0.02, 0), yawDegrees: 90, scale: 1.02
+        )
     )
 )
 ```
 
 From a scene: a `.untold` file whose entity carries a `gaussianAsset` record flagged
 `meshTwin` arrives with a `GaussianAssetLinkComponent`; the system adopts it once, automatically
-(`adoptsSceneLinks`), with the record's margin, exposure offset and swap distance.
+(`adoptsSceneLinks`), with the record's margin, exposure offset, swap distance and alignment.
+
+`alignment` places the splat inside the mesh without a re-cook (offset in metres, yaw about
++Y in degrees, uniform scale; nil is identity): the system writes `alignment.matrix` to the
+resident splat's `GaussianComponent.splatToEntity` every tick, so changing
+`GaussianTwinComponent.options.alignment` moves the splat at once — what an editor's align
+mode drives. It is stored in the scene record (`untoldengine gaussian-link --align-translate
+x,y,z --align-yaw-degrees d --align-scale s`); the cook transform baked into the `.untoldgs`
+header stays what it is.
 
 A splat already on the entity when the twin is linked becomes its payload: it is hidden until
 the swap, and its exposure offset and tint follow the twin's options from then on. The twin

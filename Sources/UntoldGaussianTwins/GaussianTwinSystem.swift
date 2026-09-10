@@ -181,12 +181,15 @@ public final class GaussianTwinSystem: EngineExtension, @unchecked Sendable {
     // MARK: - Presentation
 
     /// Turns the swap state into the engine's per-entity knobs: the occluder shell and colour
-    /// switch, the mesh dither, and the splat's opacity weight. Batching is told when the shell
-    /// or fade components come and go, since their presence takes the entity out of its batch.
+    /// switch, the mesh dither, the splat's opacity weight and its placement inside the mesh.
+    /// Batching is told when the shell or fade components come and go, since their presence
+    /// takes the entity out of its batch.
     private func applyPresentation(entityId: EntityID, twin: GaussianTwinComponent) {
         let gaussian = scene.get(component: GaussianComponent.self, for: entityId)
         gaussian?.exposureOffsetEV = twin.options.exposureOffsetEV
         gaussian?.useRealWorldTint = twin.options.useRealWorldTint
+        // Every tick, so a live edit of the alignment moves the resident splat without relinking.
+        gaussian?.splatToEntity = twin.options.alignment?.matrix ?? matrix_identity_float4x4
 
         switch twin.state {
         case .armed, .loading:

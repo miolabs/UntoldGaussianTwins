@@ -181,30 +181,52 @@ public final class GaussianTwinSystem: EngineExtension, @unchecked Sendable {
     // MARK: - Presentation
 
     /// Turns the swap state into the engine's per-entity knobs: the occluder shell and colour
-    /// switch, the mesh dither, and the splat's opacity weight. Batching is told when the shell
-    /// or fade components come and go, since their presence takes the entity out of its batch.
+    /// switch, the mesh dither, the splat's opacity weight and its placement inside the mesh.
+    /// Batching is told when the shell or fade components come and go, since their presence
+    /// takes the entity out of its batch.
     private func applyPresentation(entityId: EntityID, twin: GaussianTwinComponent) {
         let gaussian = scene.get(component: GaussianComponent.self, for: entityId)
         gaussian?.exposureOffsetEV = twin.options.exposureOffsetEV
         gaussian?.useRealWorldTint = twin.options.useRealWorldTint
+        // Every tick, so a live edit of the alignment moves the resident splat without relinking
+        // (the engine ignores an unchanged matrix and carries a splat-only box along).
+        // An alignment that is not finite or has no scale would poison the matrix (the engine
+        // inverts it for the harmonics' camera position), so such an option is identity.
+        if gaussian != nil {
+            let alignment = twin.options.alignment.flatMap { $0.isValid ? $0 : nil }
+            setGaussianSplatToEntity(entityId: entityId, alignment?.matrix ?? matrix_identity_float4x4)
+        }
 
+        // Authoring (`showsMeshWhileSwapped`): the plain mesh (colour and depth, no shell, no
+        // dither) stays under the splat through the fades too, so the swap is a splat fade-in
+        // over an untouched mesh. A fade that starts from a plain mesh stays plain even once
+        // the flag is cleared: dithering a fully drawn mesh in from nothing would pop.
+        let meshPlain = twin.options.showsMeshWhileSwapped || twin.meshKeptPlain
         switch twin.state {
         case .armed, .loading:
             gaussian?.opacityScale = 0
             setOccluder(entityId: entityId, twin: twin, present: false, drawsColor: true)
             setFade(entityId: entityId, present: false, direction: .fadeOut, progress: 0)
+            twin.meshKeptPlain = false
         case .crossFading:
             gaussian?.opacityScale = gaussianTwinSplatOpacity(state: .crossFading, progress: twin.fadeProgress)
-            setOccluder(entityId: entityId, twin: twin, present: true, drawsColor: true)
-            setFade(entityId: entityId, present: true, direction: .fadeOut, progress: twin.fadeProgress)
+            setOccluder(entityId: entityId, twin: twin, present: !meshPlain, drawsColor: true)
+            setFade(entityId: entityId, present: !meshPlain, direction: .fadeOut, progress: twin.fadeProgress)
+            twin.meshKeptPlain = meshPlain
         case .swapped:
             gaussian?.opacityScale = 1
-            setOccluder(entityId: entityId, twin: twin, present: true, drawsColor: false)
+            if twin.options.showsMeshWhileSwapped {
+                setOccluder(entityId: entityId, twin: twin, present: false, drawsColor: true)
+            } else {
+                setOccluder(entityId: entityId, twin: twin, present: true, drawsColor: false)
+            }
             setFade(entityId: entityId, present: false, direction: .fadeOut, progress: 0)
+            twin.meshKeptPlain = twin.options.showsMeshWhileSwapped
         case .reverting:
             gaussian?.opacityScale = gaussianTwinSplatOpacity(state: .reverting, progress: twin.fadeProgress)
-            setOccluder(entityId: entityId, twin: twin, present: true, drawsColor: true)
-            setFade(entityId: entityId, present: true, direction: .fadeIn, progress: twin.fadeProgress)
+            setOccluder(entityId: entityId, twin: twin, present: !meshPlain, drawsColor: true)
+            setFade(entityId: entityId, present: !meshPlain, direction: .fadeIn, progress: twin.fadeProgress)
+            twin.meshKeptPlain = meshPlain
         }
     }
 

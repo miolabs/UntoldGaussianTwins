@@ -40,6 +40,18 @@ public struct GaussianTwinOptions: Sendable, Equatable {
     public var exposureOffsetEV: Float
     /// In XR, tint the splat by the real-world lighting estimate (`GaussianComponent.useRealWorldTint`).
     public var useRealWorldTint: Bool
+    /// Where the splat sits in the mesh's local space (`GaussianComponent.splatToEntity` =
+    /// `alignment.matrix`: offset, yaw about +Y, uniform scale), applied to the resident splat
+    /// every tick so an edit shows at once; nil is identity.
+    public var alignment: GaussianSplatAlignment?
+    /// Authoring aid: while the splat shows (cross-fading, swapped, reverting), keep drawing
+    /// the mesh's colour, install no occluder shell and never dither the mesh, so the mesh and
+    /// the splat are both visible at once and `alignment` can be judged against the surface
+    /// it should sit on (an editor's align mode). The swap becomes a plain splat fade-in over
+    /// an untouched mesh; the splat still swaps in by distance and follows `alignment`. A
+    /// revert that starts from a plain mesh (the flag cleared as the camera leaves) keeps it
+    /// plain and only fades the splat out. Not meant for shipping content.
+    public var showsMeshWhileSwapped: Bool
 
     public init(
         swapDistanceMeters: Float = 0,
@@ -47,7 +59,9 @@ public struct GaussianTwinOptions: Sendable, Equatable {
         crossFadeDuration: Float = 0.25,
         occluderShrinkMeters: Float = 0.02,
         exposureOffsetEV: Float = 0,
-        useRealWorldTint: Bool = false
+        useRealWorldTint: Bool = false,
+        alignment: GaussianSplatAlignment? = nil,
+        showsMeshWhileSwapped: Bool = false
     ) {
         self.swapDistanceMeters = swapDistanceMeters
         self.hysteresisMeters = hysteresisMeters
@@ -55,6 +69,8 @@ public struct GaussianTwinOptions: Sendable, Equatable {
         self.occluderShrinkMeters = occluderShrinkMeters
         self.exposureOffsetEV = exposureOffsetEV
         self.useRealWorldTint = useRealWorldTint
+        self.alignment = alignment
+        self.showsMeshWhileSwapped = showsMeshWhileSwapped
     }
 
     /// The options a scene's `gaussianAsset` record asks for.
@@ -62,7 +78,8 @@ public struct GaussianTwinOptions: Sendable, Equatable {
         self.init(
             swapDistanceMeters: link.swapDistanceMeters,
             occluderShrinkMeters: link.occluderShrinkMeters,
-            exposureOffsetEV: link.exposureOffsetEV
+            exposureOffsetEV: link.exposureOffsetEV,
+            alignment: link.alignment
         )
     }
 }
@@ -86,6 +103,10 @@ public final class GaussianTwinComponent: Component {
     public internal(set) var fadeProgress: Float = 0
     /// Set once a payload load has failed; the swap then stays armed and does not retry.
     public internal(set) var loadFailed = false
+    /// Whether the last presentation drew the plain mesh under a showing splat
+    /// (`GaussianTwinOptions.showsMeshWhileSwapped`). A fade that starts from that keeps the
+    /// mesh plain: dithering a fully drawn mesh from nothing would be a visible pop.
+    var meshKeptPlain = false
 
     /// Bumped on every link, relink and unlink; a load applies only if it still matches.
     var loadGeneration: UInt32 = 0

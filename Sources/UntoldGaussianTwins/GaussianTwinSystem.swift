@@ -188,8 +188,11 @@ public final class GaussianTwinSystem: EngineExtension, @unchecked Sendable {
         let gaussian = scene.get(component: GaussianComponent.self, for: entityId)
         gaussian?.exposureOffsetEV = twin.options.exposureOffsetEV
         gaussian?.useRealWorldTint = twin.options.useRealWorldTint
-        // Every tick, so a live edit of the alignment moves the resident splat without relinking.
-        gaussian?.splatToEntity = twin.options.alignment?.matrix ?? matrix_identity_float4x4
+        // Every tick, so a live edit of the alignment moves the resident splat without relinking
+        // (the engine ignores an unchanged matrix and carries a splat-only box along).
+        if gaussian != nil {
+            setGaussianSplatToEntity(entityId: entityId, twin.options.alignment?.matrix ?? matrix_identity_float4x4)
+        }
 
         switch twin.state {
         case .armed, .loading:

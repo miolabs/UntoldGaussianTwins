@@ -58,10 +58,10 @@ From a scene: a `.untold` file whose entity carries a `gaussianAsset` record fla
 (`adoptsSceneLinks`), with the record's margin, exposure offset, swap distance and alignment.
 
 `alignment` places the splat inside the mesh without a re-cook (offset in metres, yaw about
-+Y in degrees, uniform scale; nil is identity): the system writes `alignment.matrix` to the
-resident splat's `GaussianComponent.splatToEntity` every tick, so changing
-`GaussianTwinComponent.options.alignment` moves the splat at once — what an editor's align
-mode drives. It is stored in the scene record (`untoldengine gaussian-link --align-translate
++Y in degrees, uniform scale; nil is identity): the system sets `alignment.matrix` on the
+resident splat's `GaussianComponent.splatToEntity` (`setGaussianSplatToEntity`) every tick, so
+changing `GaussianTwinComponent.options.alignment` moves the splat at once — what an editor's
+align mode drives. It is stored in the scene record (`untoldengine gaussian-link --align-translate
 x,y,z --align-yaw-degrees d --align-scale s`); the cook transform baked into the `.untoldgs`
 header stays what it is.
 

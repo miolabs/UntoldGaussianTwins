@@ -166,6 +166,18 @@ final class GaussianTwinStateMachineTests: XCTestCase {
         scene.get(component: GaussianTwinComponent.self, for: entity)?.options.alignment = nil
         GaussianTwinSystem.shared.update(deltaTime: 0.016)
         XCTAssertEqual(gaussian?.splatToEntity, matrix_identity_float4x4, "nil is identity")
+
+        scene.get(component: GaussianTwinComponent.self, for: entity)?.options.alignment = moved
+        GaussianTwinSystem.shared.update(deltaTime: 0.016)
+        for invalid in [
+            GaussianSplatAlignment(scale: 0),
+            GaussianSplatAlignment(yawDegrees: .nan),
+            GaussianSplatAlignment(translation: SIMD3<Float>(.infinity, 0, 0)),
+        ] {
+            scene.get(component: GaussianTwinComponent.self, for: entity)?.options.alignment = invalid
+            GaussianTwinSystem.shared.update(deltaTime: 0.016)
+            XCTAssertEqual(gaussian?.splatToEntity, matrix_identity_float4x4, "An invalid alignment places the splat at identity: \(invalid)")
+        }
     }
 
     // MARK: - Registration (needs the engine's scene, no renderer)

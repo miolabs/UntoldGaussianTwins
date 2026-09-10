@@ -190,8 +190,11 @@ public final class GaussianTwinSystem: EngineExtension, @unchecked Sendable {
         gaussian?.useRealWorldTint = twin.options.useRealWorldTint
         // Every tick, so a live edit of the alignment moves the resident splat without relinking
         // (the engine ignores an unchanged matrix and carries a splat-only box along).
+        // An alignment that is not finite or has no scale would poison the matrix (the engine
+        // inverts it for the harmonics' camera position), so such an option is identity.
         if gaussian != nil {
-            setGaussianSplatToEntity(entityId: entityId, twin.options.alignment?.matrix ?? matrix_identity_float4x4)
+            let alignment = twin.options.alignment.flatMap { $0.isValid ? $0 : nil }
+            setGaussianSplatToEntity(entityId: entityId, alignment?.matrix ?? matrix_identity_float4x4)
         }
 
         switch twin.state {

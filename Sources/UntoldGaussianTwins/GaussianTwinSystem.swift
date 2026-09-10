@@ -197,28 +197,36 @@ public final class GaussianTwinSystem: EngineExtension, @unchecked Sendable {
             setGaussianSplatToEntity(entityId: entityId, alignment?.matrix ?? matrix_identity_float4x4)
         }
 
+        // Authoring (`showsMeshWhileSwapped`): the plain mesh (colour and depth, no shell, no
+        // dither) stays under the splat through the fades too, so the swap is a splat fade-in
+        // over an untouched mesh. A fade that starts from a plain mesh stays plain even once
+        // the flag is cleared: dithering a fully drawn mesh in from nothing would pop.
+        let meshPlain = twin.options.showsMeshWhileSwapped || twin.meshKeptPlain
         switch twin.state {
         case .armed, .loading:
             gaussian?.opacityScale = 0
             setOccluder(entityId: entityId, twin: twin, present: false, drawsColor: true)
             setFade(entityId: entityId, present: false, direction: .fadeOut, progress: 0)
+            twin.meshKeptPlain = false
         case .crossFading:
             gaussian?.opacityScale = gaussianTwinSplatOpacity(state: .crossFading, progress: twin.fadeProgress)
-            setOccluder(entityId: entityId, twin: twin, present: true, drawsColor: true)
-            setFade(entityId: entityId, present: true, direction: .fadeOut, progress: twin.fadeProgress)
+            setOccluder(entityId: entityId, twin: twin, present: !meshPlain, drawsColor: true)
+            setFade(entityId: entityId, present: !meshPlain, direction: .fadeOut, progress: twin.fadeProgress)
+            twin.meshKeptPlain = meshPlain
         case .swapped:
             gaussian?.opacityScale = 1
             if twin.options.showsMeshWhileSwapped {
-                // Authoring: the plain mesh (colour and depth, no shell) under the splat.
                 setOccluder(entityId: entityId, twin: twin, present: false, drawsColor: true)
             } else {
                 setOccluder(entityId: entityId, twin: twin, present: true, drawsColor: false)
             }
             setFade(entityId: entityId, present: false, direction: .fadeOut, progress: 0)
+            twin.meshKeptPlain = twin.options.showsMeshWhileSwapped
         case .reverting:
             gaussian?.opacityScale = gaussianTwinSplatOpacity(state: .reverting, progress: twin.fadeProgress)
-            setOccluder(entityId: entityId, twin: twin, present: true, drawsColor: true)
-            setFade(entityId: entityId, present: true, direction: .fadeIn, progress: twin.fadeProgress)
+            setOccluder(entityId: entityId, twin: twin, present: !meshPlain, drawsColor: true)
+            setFade(entityId: entityId, present: !meshPlain, direction: .fadeIn, progress: twin.fadeProgress)
+            twin.meshKeptPlain = meshPlain
         }
     }
 

@@ -160,9 +160,11 @@
             twin.loadTask?.cancel()
         }
 
-        /// Authoring aid: with `showsMeshWhileSwapped` the swapped state keeps the plain mesh
-        /// (colour on, no shell) under the splat, which still swaps in by distance and follows
-        /// the alignment; clearing the flag restores the normal swapped shell on the next tick.
+        /// Authoring aid: with `showsMeshWhileSwapped` the plain mesh (colour on, no shell, no
+        /// dither) stays under the splat through the fade and the swapped state, so the swap is
+        /// a splat fade-in over an untouched mesh; the splat still swaps in by distance and
+        /// follows the alignment. Clearing the flag restores the normal swapped shell on the
+        /// next tick.
         func testShowsMeshWhileSwappedKeepsThePlainMeshUnderTheSplat() async throws {
             makeCamera(at: simd_float3(0, 0, 5))
             let entity = makeCubeEntity()
@@ -179,8 +181,13 @@
 
             tick()
             XCTAssertEqual(twin.state, .crossFading)
-            XCTAssertEqual(scene.get(component: MeshOccluderComponent.self, for: entity)?.drawsColor, true, "The fade is unchanged: shell on, colour on")
-            XCTAssertNotNil(scene.get(component: MeshFadeComponent.self, for: entity))
+            XCTAssertNil(scene.get(component: MeshOccluderComponent.self, for: entity), "Cross-fading with the mesh showing: no shell")
+            XCTAssertNil(scene.get(component: MeshFadeComponent.self, for: entity), "and no dither: only the splat ramps in")
+            XCTAssertTrue(twin.meshKeptPlain)
+            tick(deltaTime: 0.05)
+            XCTAssertEqual(twin.state, .crossFading)
+            XCTAssertEqual(gaussian.opacityScale, 0.5, accuracy: 0.01)
+            XCTAssertNil(scene.get(component: MeshFadeComponent.self, for: entity))
 
             tick(2, deltaTime: 0.1)
             XCTAssertEqual(twin.state, .swapped)
@@ -195,11 +202,61 @@
             let occluder = try XCTUnwrap(scene.get(component: MeshOccluderComponent.self, for: entity), "Flag cleared: the normal swapped shell is back on the next tick")
             XCTAssertFalse(occluder.drawsColor)
             XCTAssertEqual(gaussian.opacityScale, 1)
+            XCTAssertFalse(twin.meshKeptPlain)
 
             twin.options.showsMeshWhileSwapped = true
             tick()
             XCTAssertNil(scene.get(component: MeshOccluderComponent.self, for: entity), "and goes again when the flag is set")
             XCTAssertEqual(gaussian.splatToEntity, alignment.matrix)
+        }
+
+        /// An editor's align mode ends by clearing the flag and restoring the link's swap
+        /// distance in one go; with the camera beyond it the twin reverts from a mesh that was
+        /// drawing plain, which must not blink out and dither back in: the mesh stays plain and
+        /// only the splat fades out.
+        func testRevertingFromAPlainMeshKeepsItPlain() async throws {
+            let camera = makeCamera(at: simd_float3(0, 0, 5))
+            let entity = makeCubeEntity()
+            try setEntityGaussianTwin(
+                entityId: entity,
+                payloadURL: testPLYURL(),
+                options: GaussianTwinOptions(swapDistanceMeters: 0, crossFadeDuration: 0.1, showsMeshWhileSwapped: true)
+            )
+            let twin = try XCTUnwrap(scene.get(component: GaussianTwinComponent.self, for: entity))
+            tick()
+            try await waitForPayload(on: entity)
+            let gaussian = try XCTUnwrap(scene.get(component: GaussianComponent.self, for: entity))
+            tick(3, deltaTime: 0.1)
+            XCTAssertEqual(twin.state, .swapped)
+            XCTAssertNil(scene.get(component: MeshOccluderComponent.self, for: entity))
+
+            // The mode ends: the link's own options are back and the camera is outside them.
+            twin.options.showsMeshWhileSwapped = false
+            twin.options.swapDistanceMeters = 2
+            cameraLookAt(entityId: camera, eye: simd_float3(0, 0, 40), target: .zero, up: simd_float3(0, 1, 0))
+            tick()
+            XCTAssertEqual(twin.state, .reverting)
+            XCTAssertNil(scene.get(component: MeshOccluderComponent.self, for: entity), "Reverting from a plain mesh: no shell")
+            XCTAssertNil(scene.get(component: MeshFadeComponent.self, for: entity), "and no fade-in from nothing")
+            XCTAssertEqual(gaussian.opacityScale, 1, "the splat starts fading out from full")
+            tick(deltaTime: 0.05)
+            XCTAssertEqual(twin.state, .reverting)
+            XCTAssertEqual(gaussian.opacityScale, 0.5, accuracy: 0.01)
+            XCTAssertNil(scene.get(component: MeshFadeComponent.self, for: entity))
+
+            tick(2, deltaTime: 0.1)
+            XCTAssertEqual(twin.state, .armed)
+            XCTAssertFalse(twin.meshKeptPlain)
+            XCTAssertNil(scene.get(component: MeshOccluderComponent.self, for: entity))
+            XCTAssertNil(scene.get(component: MeshFadeComponent.self, for: entity))
+            XCTAssertEqual(gaussian.opacityScale, 0)
+
+            // The next swap, with the flag off, is the normal one: shell and dither.
+            cameraLookAt(entityId: camera, eye: simd_float3(0, 0, 1), target: .zero, up: simd_float3(0, 1, 0))
+            tick()
+            XCTAssertEqual(twin.state, .crossFading)
+            XCTAssertEqual(scene.get(component: MeshOccluderComponent.self, for: entity)?.drawsColor, true)
+            XCTAssertEqual(scene.get(component: MeshFadeComponent.self, for: entity)?.direction, .fadeOut)
         }
 
         func testUnlinkingDropsTheSplatAndItsPresentation() async throws {

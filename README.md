@@ -65,14 +65,16 @@ align mode drives. It is stored in the scene record (`untoldengine gaussian-link
 x,y,z --align-yaw-degrees d --align-scale s`); the cook transform baked into the `.untoldgs`
 header stays what it is.
 
-`showsMeshWhileSwapped` is an authoring aid for that alignment: while it is set, the swapped
-state keeps drawing the mesh's colour and installs no occluder shell, so the mesh and the
-splat are both visible at once and the offset, yaw and scale can be judged against the surface
-the splat should sit on. The splat still swaps in by distance and follows `alignment`; the
-fades and the other states are unchanged, and clearing the flag restores the normal swapped
-presentation on the next tick. An editor's align mode sets it (together with a zero swap
-distance) on the twin's options only, never in the scene record; it is not meant for shipping
-content.
+`showsMeshWhileSwapped` is an authoring aid for that alignment: while it is set, the states
+that show the splat (`crossFading`, `swapped`, `reverting`) keep drawing the mesh's colour,
+install no occluder shell and never dither the mesh, so the mesh and the splat are both
+visible at once and the offset, yaw and scale can be judged against the surface the splat
+should sit on. The swap becomes a plain splat fade-in over an untouched mesh; the splat still
+swaps in by distance and follows `alignment`. Clearing the flag while swapped restores the
+normal swapped presentation on the next tick; a revert that starts from a plain mesh (the flag
+cleared as the camera leaves) keeps the mesh plain and only fades the splat out, so the mesh
+never blinks. An editor's align mode sets it (together with a zero swap distance) on the twin's
+options only, never in the scene record; it is not meant for shipping content.
 
 A splat already on the entity when the twin is linked becomes its payload: it is hidden until
 the swap, and its exposure offset and tint follow the twin's options from then on. The twin
@@ -89,9 +91,9 @@ starts over from `armed`.
 |---|---|
 | `armed` | The mesh. The payload may already be resident from an earlier swap. |
 | `loading` | Still the mesh; nothing changes until the payload is on the GPU. |
-| `crossFading` | The mesh dithers out (`MeshFadeComponent`) while the splat's opacity ramps in, over `crossFadeDuration`. The occluder shell is on. |
+| `crossFading` | The mesh dithers out (`MeshFadeComponent`) while the splat's opacity ramps in, over `crossFadeDuration`. The occluder shell is on. With `showsMeshWhileSwapped` only the splat ramps in; the mesh draws as usual. |
 | `swapped` | The splat. The mesh draws no colour (`MeshOccluderComponent.drawsColor = false`) but keeps writing depth as a shrunk shell, casting shadows, colliding and being picked. With `showsMeshWhileSwapped` the mesh draws as usual instead (no shell). |
-| `reverting` | The reverse fade when the camera leaves `swapDistanceMeters + hysteresisMeters`. Ends `armed`; the payload stays resident so the next swap is instant. |
+| `reverting` | The reverse fade when the camera leaves `swapDistanceMeters + hysteresisMeters`. Ends `armed`; the payload stays resident so the next swap is instant. With `showsMeshWhileSwapped`, or when the mesh was already drawing plain, only the splat fades out. |
 
 Notes:
 

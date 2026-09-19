@@ -23,6 +23,11 @@ public final class GaussianTwinSystem: EngineExtension, @unchecked Sendable {
     /// through a `gaussianAsset` record flagged `meshTwin` (`GaussianAssetLinkComponent`).
     public var adoptsSceneLinks = true
 
+    /// Whether `install()` has registered the system with the engine, so it ticks and swaps.
+    public var isInstalled: Bool {
+        installed
+    }
+
     /// Longest frame the fade integrates, so a hitch does not jump it to the end.
     private let maxDeltaTime: Float = 0.1
     private var installed = false

@@ -16,6 +16,8 @@ let package = Package(
         // package builds on are on the fork's develop until upstream ships them.
         .package(url: "https://github.com/untoldengine/UntoldEngine.git", branch: "develop"),
     ],
+    // Sources/UntoldGaussianTwinsEditor is deliberately not a target: only the Untold editor
+    // compiles it, against its own engine, as untold-package.json tells it to.
     targets: [
         .target(
             name: "UntoldGaussianTwins",

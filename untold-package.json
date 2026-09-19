@@ -1,0 +1,6 @@
+{
+  "id": "com.miolabs.untold.gaussianTwins",
+  "module": "UntoldGaussianTwins",
+  "runtimeSources": "Sources/UntoldGaussianTwins",
+  "editorSources": "Sources/UntoldGaussianTwinsEditor"
+}

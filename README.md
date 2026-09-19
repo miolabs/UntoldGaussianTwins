@@ -30,6 +30,24 @@ GaussianTwinSystem.shared.install()
 The system ticks from the engine's update as an `EngineExtension` and cleans up after
 destroyed entities.
 
+## In the editor
+
+The package is also a plugin package for the Untold editor. A project that lists it in its
+`UntoldEditor.json` gets the package's menu items, which the editor compiles from
+`Sources/UntoldGaussianTwinsEditor` (no game target compiles that folder):
+
+```json
+{ "pluginPackages": [ { "path": "../../../Libs/UntoldGaussianTwins" } ] }
+```
+
+- **View > Preview Splat Twins** runs the system in the viewport, swapping linked meshes for
+  their twins as the scene camera approaches. Persisted per project, on by default.
+- **Debug > Splat Debug** holds the engine's splat pipeline switches (HZB occlusion cull, opaque
+  depth test, per-pixel blend cap) and **Reset Link Adoption**.
+
+The editor links this package, so the menu items drive the same `GaussianTwinSystem` that its
+Inspector's Splat Twin section works with.
+
 ## Linking a twin
 
 From code, on any mesh entity:

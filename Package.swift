@@ -14,7 +14,9 @@ let package = Package(
     dependencies: [
         // The mesh occluder shell, mesh fade, gaussianAsset link and URL splat loader this
         // package builds on are on the fork's develop until upstream ships them.
-        .package(url: "https://github.com/untoldengine/UntoldEngine.git", branch: "develop"),
+        // fork-engine: the fork's develop, the engine the miolabs editor and demos pin, so
+        // SwiftPM sees one engine. main pins upstream develop.
+        .package(url: "https://github.com/miolabs/UntoldEngine.git", branch: "develop"),
     ],
     // Sources/UntoldGaussianTwinsEditor is deliberately not a target: only the Untold editor
     // compiles it, against its own engine, as untold-package.json tells it to.

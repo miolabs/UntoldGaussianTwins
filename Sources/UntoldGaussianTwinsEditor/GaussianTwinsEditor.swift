@@ -10,6 +10,7 @@
 
 import UntoldComponentKit
 import UntoldEngine
+import UntoldGaussianTwins
 
 /// View > Preview Splat Twins, and Debug > Splat Debug.
 final class GaussianTwinsEditor: EditorMenuPlugin {
